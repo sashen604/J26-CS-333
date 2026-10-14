@@ -20,8 +20,8 @@ Each member organises the subfolders inside their own pillar folder however they
 
 ## Team conventions
 
-1. **One branch per pillar.** Work on your own branch (for example `p1_dataset`,
-   `p2_sdn`, `p3_fusion` or `p4_robustness`), not directly on `main`.
+1. **One branch per pillar.** Work on your own branch, not directly on `main`. Name it
+   `feature/pN-name`, where `N` is the pillar number, for example `feature/p4-robustness`.
 2. **Pull requests to `main`.** Changes reach `main` only through a pull request.
 3. **No data files committed.** Datasets, CSVs and trained models stay out of Git.
    See [`data/README.md`](data/README.md) and `.gitignore`.
