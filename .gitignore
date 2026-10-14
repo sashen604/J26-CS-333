@@ -1,0 +1,28 @@
+# Python virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Data: ignore everything in data/ except its README and placeholder
+data/*
+!data/README.md
+!data/.gitkeep
+
+# Data and model files anywhere in the repo
+*.csv
+*.pkl
+*.joblib
+*.h5
+*.hdf5
+*.keras
+*.pt
+*.pth
+*.ckpt
+*.onnx
+*.model
+*.sav
