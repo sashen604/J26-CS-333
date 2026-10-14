@@ -7,14 +7,14 @@ activity. The work is split into four pillars, and each pillar is owned by one t
 
 ## Pillars and ownership
 
-| Folder           | Pillar                         | Owner |
-|------------------|--------------------------------|-------|
-| `p1_dataset/`    | P1: Dataset                    | _TBD_ |
-| `p2_sdn/`        | P2: SDN layer                  | _TBD_ |
-| `p3_fusion/`     | P3: Fusion                     | _TBD_ |
-| `p4_robustness/` | P4: Robustness                 | _TBD_ |
-| `shared/`        | Shared code used by all pillars | Whole team |
-| `data/`          | Local datasets (not committed) | Everyone |
+| Folder           | Pillar                          | Owner      | Branch                  |
+|------------------|---------------------------------|------------|-------------------------|
+| `p1_dataset/`    | P1: Dataset                     | Sunera     | `feature/p1-dataset`    |
+| `p2_sdn/`        | P2: SDN layer                   | Sasmitha   | `feature/p2-sdn`        |
+| `p3_fusion/`     | P3: Fusion                      | Janith     | `feature/p3-fusion`     |
+| `p4_robustness/` | P4: Robustness                  | Kavish     | `feature/p4-robustness` |
+| `shared/`        | Shared code used by all pillars | Whole team | (none; changes by agreement) |
+| `data/`          | Local datasets (not committed)  | Everyone   | (none)                  |
 
 Each member organises the subfolders inside their own pillar folder however they see fit.
 
