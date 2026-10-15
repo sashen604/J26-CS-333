@@ -27,6 +27,30 @@ and any setup steps, so the rest of the team can get the same copy.
 - **Replicating on the official source is still pending.**
 - **Setup:** from the repo root, run `python p4_robustness/data_prep.py`.
 
+#### Mirror is not official CICIoT2023
+
+The mirror's columns share names with the official CICIoT2023 features but are **not the same
+values**. A subset of the official data could not exceed the official maxima, and this one does:
+
+| Feature | This mirror (test split) | Official CICIoT2023 (UNB statistics table) |
+|---|---|---|
+| `Number` | max 100 | max 15 |
+| `ack_count` | max 100 | max 7.7 |
+| `IAT` | all values under 0.11 | median about 83 million |
+| `Variance` | up to about 7.2e7 | 0 to 1 |
+| `Time_To_Live` | present | not an official field |
+
+The mirror has **39 features**, built from a reorganised copy (`bencorn/CIC-IoT-2023`, `CSV/CSV/`),
+not from Neto et al.'s original **46-feature** merged CSVs. No published definitions were found
+for the mirror's versions of these columns.
+
+Sources:
+- Official feature statistics: https://www.unb.ca/cic/datasets/iotdataset-2023.html
+- Uploader's READMEs: https://huggingface.co/datasets/lacg030175/CIC-IoT-2023-canonical-neto
+  (says the earlier versions were built from `CSV/CSV/`, while this one uses Neto's original merged CSVs) and
+  https://huggingface.co/datasets/lacg030175/CIC-IoT-2023-neto-full (says the source copy dropped 7 of
+  the 46 original features).
+
 #### Window-size leakage
 
 **Rule:** drop every feature whose value depends on the measurement window length. In this
@@ -54,6 +78,11 @@ exactly the majority-class baseline. `Rate`, `IAT`, `Std` and `Variance` are not
 are left unrounded.
 
 #### Limitations
+
+- **Not official features:** every result in `p4_robustness/results/` applies to the mirror's
+  version of the features, not to CICIoT2023 as published (see "Mirror is not official CICIoT2023").
+  Replication on official data is still pending, using either the UNB download or the uploader's
+  `lacg030175/CIC-IoT-2023-canonical-neto` dataset.
 
 - **Provenance:** this is an unofficial third-party mirror, already reduced (caps of 200k benign
   and 50k per attack type, 39 of the original features), not the official UNB release.
