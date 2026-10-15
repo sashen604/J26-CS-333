@@ -3,6 +3,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "experiments"))
@@ -104,6 +105,97 @@ def test_detectors_use_shared_reference_and_fire_on_scenario_a(kind):
     stream = np.concatenate([np.zeros(200), np.full(100, 10.0)])
     delay, fa, missed = de.score_run(de.alarm_indices(kind, ref, 5.0 if kind == "cusum" else 3.0, stream))
     assert (delay, fa, missed) == (0, 0, False)
+
+
+# ---- Scenario C ----
+
+def benign_frame(n=16_000):
+    rng = np.random.default_rng(0)
+    return pd.DataFrame({
+        "Header_Length": np.round(rng.uniform(9, 50, n), 1),  # quantised feature
+        "IAT": rng.uniform(0.001, 0.1, n),                    # unquantised feature
+        "Rate": rng.uniform(0, 100, n),                        # not scaled
+        "row_id": np.arange(n),
+        de.data_prep.TARGET: np.zeros(n, dtype=int),
+    })
+
+
+def test_scenario_c_factor_is_one_then_rises_linearly_to_two():
+    f = de.scenario_c_factors()
+    assert len(f) == 300
+    assert np.all(f[:200] == 1.0)
+    assert f[200] == 1.0 and f[-1] == 2.0
+    assert np.allclose(np.diff(f[200:]), 1.0 / 99)
+
+
+def test_scenario_c_uses_benign_rows_only_without_replacement():
+    df = benign_frame()
+    frame, _ = de.build_scenario_c(df, ["Header_Length", "IAT"], seed=0)
+    assert len(frame) == 300 * 50
+    assert frame[de.data_prep.TARGET].eq(0).all()
+    assert frame["row_id"].is_unique
+
+
+def test_scenario_c_scales_multiplicatively_and_only_the_chosen_features():
+    df = benign_frame()
+    frame, row_factor = de.build_scenario_c(df, ["IAT"], seed=1)
+    original = df.set_index("row_id").loc[frame["row_id"]]
+    assert np.allclose(frame["IAT"].to_numpy(), original["IAT"].to_numpy() * row_factor)
+    assert np.allclose(frame["Rate"].to_numpy(), original["Rate"].to_numpy())
+    assert np.array_equal(np.unique(row_factor[:200 * 50]), [1.0])
+
+
+def test_scenario_c_rerounds_quantised_features_to_the_grid():
+    frame, row_factor = de.build_scenario_c(benign_frame(), ["Header_Length"], seed=2)
+    hl = frame["Header_Length"].to_numpy()
+    assert np.allclose(hl, np.round(hl, 1))
+
+
+def test_scenario_c_keeps_non_negative_features_non_negative():
+    df = benign_frame().assign(IAT=0.0)
+    frame, _ = de.build_scenario_c(df, ["IAT"], seed=3)
+    assert (frame["IAT"] == 0.0).all()
+
+
+def test_scenario_c_needs_enough_benign_rows():
+    with pytest.raises(ValueError):
+        de.build_scenario_c(benign_frame(1000), ["IAT"], seed=0)
+
+
+@pytest.mark.parametrize("feature, reason", [
+    ("Protocol Type", "protocol code"),
+    ("TCP", "flag or 0-1 share"),
+    ("syn_flag_number", "flag or 0-1 share"),
+    ("Std", "window-dependent"),
+    ("Tot sum", "window-dependent"),
+    ("Time_To_Live", "hard upper bound"),
+    ("Header_Length", None),
+    ("IAT", None),
+    ("Rate", None),
+])
+def test_scale_unsafe_reason(feature, reason):
+    assert de.scale_unsafe_reason(feature) == reason
+
+
+def test_select_scale_safe_takes_top_n_by_gain_skipping_unsafe():
+    shares = {"Protocol Type": 0.5, "Header_Length": 0.2, "TCP": 0.1, "Max": 0.08,
+              "Std": 0.05, "Min": 0.04, "AVG": 0.02, "IAT": 0.01}
+    assert de.select_scale_safe(shares, n=3) == ["Header_Length", "Max", "Min"]
+    with pytest.raises(ValueError):
+        de.select_scale_safe({"TCP": 1.0}, n=1)
+
+
+def test_out_of_range_counts_only_scaled_rows():
+    frame = pd.DataFrame({"x": [5.0, 50.0, 3.0, 12.0]})
+    ref = pd.DataFrame({"x": [1.0, 10.0]})
+    assert de.out_of_range_counts(frame, np.array([1.0, 1.0, 1.5, 2.0]), ["x"], ref) == {"x": 1}
+
+
+def test_largest_jump_sigma():
+    ref = de.Reference(0.0, 1.0, 1.0, False, 10)
+    stream = np.zeros(300)
+    stream[250:] = 3.0
+    assert de.largest_jump_sigma(stream, ref) == (3.0, 250)
 
 
 def test_calibration_hits_target_on_synthetic_noise():

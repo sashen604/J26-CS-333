@@ -39,10 +39,40 @@ SPLITS = ("train", "test", "validation")
 LABEL_COLUMNS = ("label", "Label", "attack_class")
 TARGET = "is_mirai"
 
-# Features dropped permanently. 'Number' is 10 for 99.95% of benign rows and 100 for
-# 99.42% of Mirai rows in this subset, so it reflects how the captures were generated,
-# not a property of the traffic. A single split on it alone reached 0.9998 test accuracy.
-EXCLUDED_FEATURES = ("Number",)
+# Features dropped permanently: WINDOW-SIZE LEAKAGE.
+# Rule: drop every feature whose value depends on the measurement window length,
+# because window length differs by class in this capture (10 packets benign, 100 Mirai).
+# Evidence (test split):
+# - 'Number' (packets per window) is 10 for 99.95% of benign rows and 100 for 99.42% of
+#   Mirai rows. A single split on it alone reached 0.9998 test accuracy.
+# - ack_count, rst_count, syn_count and fin_count are <= Number on every test row, i.e. counts
+#   over the window (benign max 10/6/8/3, Mirai max 100/58/38/11).
+# - Tot sum / (Number x AVG) = 1.0000 at the 1st, 50th and 99th percentiles, for both classes.
+# - Tot size is identical to AVG on every row (a duplicate, dropped for tidiness).
+EXCLUDED_FEATURES = (
+    "Number",
+    "Tot sum",
+    "ack_count",
+    "rst_count",
+    "syn_count",
+    "fin_count",
+    "Tot size",
+)
+
+# Features rounded to 1 decimal place (0.1 grid) for BOTH classes: RESOLUTION LEAKAGE.
+# These are means or shares over the window's packets. Benign values are means over 10
+# packets (always on a 0.1 grid), Mirai over 100 (0.01 grid), so unrounded precision leaks
+# window size: before rounding, "any value off the 0.1 grid -> Mirai" scored 0.8134 test
+# accuracy. Rate, IAT, Std and Variance are not on a grid and are left unrounded.
+QUANTISED_FEATURES = (
+    "Header_Length", "Protocol Type", "Time_To_Live",
+    "fin_flag_number", "syn_flag_number", "rst_flag_number", "psh_flag_number",
+    "ack_flag_number", "ece_flag_number", "cwr_flag_number",
+    "HTTP", "HTTPS", "DNS", "Telnet", "SMTP", "SSH", "IRC", "TCP", "UDP",
+    "DHCP", "ARP", "ICMP", "IGMP", "IPv", "LLC",
+    "Min", "Max", "AVG",
+)
+QUANTISE_DECIMALS = 1
 
 
 def split_url(split):
@@ -84,12 +114,20 @@ def feature_columns(df):
     return [c for c in df.columns if c not in excluded]
 
 
+def quantise(df):
+    """Return a copy with QUANTISED_FEATURES (those present) rounded to QUANTISE_DECIMALS."""
+    out = df.copy()
+    cols = [c for c in QUANTISED_FEATURES if c in out.columns]
+    out[cols] = out[cols].round(QUANTISE_DECIMALS)
+    return out
+
+
 def load_split(split, data_dir=DATA_DIR):
-    """Load one split, already filtered to Mirai vs benign."""
+    """Load one split, filtered to Mirai vs benign, with QUANTISED_FEATURES rounded."""
     path = split_path(split, data_dir)
     if not path.exists():
         raise FileNotFoundError(f"{path} not found. Run `python p4_robustness/data_prep.py` first.")
-    return filter_mirai_vs_benign(pd.read_parquet(path))
+    return quantise(filter_mirai_vs_benign(pd.read_parquet(path)))
 
 
 def class_counts(df):

@@ -21,6 +21,13 @@ def model(data):
     return ProxyFusionModel.train(X, y, n_estimators=20, max_depth=3)
 
 
+@pytest.mark.parametrize("leaked", list(data_prep.EXCLUDED_FEATURES))
+def test_training_refuses_window_size_leakage_features(data, leaked):
+    X, y = data
+    with pytest.raises(ValueError, match="window-size leakage"):
+        ProxyFusionModel.train(X.assign(**{leaked: 1.0}), y, n_estimators=2)
+
+
 def test_predict_proba_shape_and_rows_sum_to_one(model, data):
     X, _ = data
     p = model.predict_proba(X)

@@ -19,6 +19,9 @@ CUSUM drift detection, incident reporting (WeasyPrint).
 - Adversarial examples must satisfy validity + coherence
   (Vitorino et al. 2023)
 - Fusion robustness is a tested hypothesis, not a claim
+- Features in QUANTISED_FEATURES are rounded to 0.1. Adversarial
+  examples must also respect this grid, or they are invalid
+  (Vitorino validity).
 
 ## Interface (P3's model is a black box)
 predict_proba(X_flow, X_csi) -> probabilities

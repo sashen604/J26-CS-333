@@ -7,8 +7,9 @@ subset; see the Limitations section in data/README.md.
 
 It is an XGBoost binary classifier (0 = benign, 1 = Mirai) trained on flow
 features from the "CICIoT2023 subset (HF mirror)"; see data_prep.py for
-provenance. The feature 'Number' is excluded as a capture artefact
-(data_prep.EXCLUDED_FEATURES). It is wrapped in the interface from
+provenance. Features that depend on the measurement window length are
+excluded as window-size leakage (data_prep.EXCLUDED_FEATURES), and train()
+refuses any of them. It is wrapped in the interface from
 p4_robustness/CLAUDE.md:
 
     predict_proba(X_flow, X_csi=None) -> probabilities, shape (n, 2)
@@ -50,6 +51,10 @@ class ProxyFusionModel:
     def train(cls, X_flow, y, **params):
         if not isinstance(X_flow, pd.DataFrame):
             raise TypeError("X_flow must be a pandas DataFrame so the feature schema is fixed by column name")
+        # Guard: refuse to train on any window-size-leakage feature (data_prep.EXCLUDED_FEATURES).
+        leaked = [c for c in X_flow.columns if c in data_prep.EXCLUDED_FEATURES]
+        if leaked:
+            raise ValueError(f"Refusing to train on excluded (window-size leakage) features: {leaked}")
         model = xgboost.XGBClassifier(**{**XGB_PARAMS, **params})
         model.fit(X_flow, y)
         return cls(model, X_flow.columns)
@@ -112,9 +117,9 @@ def evaluate(model, df):
 
 def main():
     train = data_prep.load_split("train")
-    # feature_columns() drops label columns and EXCLUDED_FEATURES ('Number', a capture artefact).
+    # feature_columns() drops label columns and EXCLUDED_FEATURES (window-size leakage);
+    # ProxyFusionModel.train() refuses to train if any of them gets back in.
     features = data_prep.feature_columns(train)
-    assert not set(features) & set(data_prep.EXCLUDED_FEATURES)
     model = ProxyFusionModel.train(train[features], train[data_prep.TARGET])
     model.save()
     print(f"Saved model to {MODEL_PATH} ({len(features)} features)")

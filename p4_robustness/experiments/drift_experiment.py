@@ -176,9 +176,13 @@ def score_run(alarms, drift_start=N_BEFORE):
 
 def run_scenario(kind, ref, param, benign_scores, mirai_scores, scenario, seeds=EVAL_SEEDS):
     counts = mirai_counts(scenario)
-    rows = [score_run(alarm_indices(kind, ref, param,
-                                    build_stream(benign_scores, mirai_scores, counts, s)))
-            for s in seeds]
+    streams = [build_stream(benign_scores, mirai_scores, counts, s) for s in seeds]
+    return run_streams(kind, ref, param, streams)
+
+
+def run_streams(kind, ref, param, streams):
+    """Delay, false-alarm and missed-detection summary of one detector over prebuilt streams."""
+    rows = [score_run(alarm_indices(kind, ref, param, s)) for s in streams]
     delays = [d for d, _, _ in rows if d is not None]
     fas = [f for _, f, _ in rows]
     missed = sum(m for _, _, m in rows)
@@ -190,6 +194,92 @@ def run_scenario(kind, ref, param, benign_scores, mirai_scores, scenario, seeds=
         "missed": int(missed),
         "n": len(rows),
     }
+
+
+# ---------------------------------------------------------------------------
+# Scenario C: covariate drift in benign traffic (no Mirai rows at all)
+# ---------------------------------------------------------------------------
+N_SCALED = 5
+SCALE_START, SCALE_END = 1.0, 2.0
+
+# Features that may NOT be scaled, with the reason. Everything else is a candidate.
+PROTOCOL_CODES = {"Protocol Type"}  # a code (6 = TCP, 17 = UDP, 47 = GRE); scaled values name no protocol
+SHARE_FEATURES = {  # 0-1 shares of packets with a flag or protocol; x2 can exceed 1
+    "fin_flag_number", "syn_flag_number", "rst_flag_number", "psh_flag_number",
+    "ack_flag_number", "ece_flag_number", "cwr_flag_number",
+    "HTTP", "HTTPS", "DNS", "Telnet", "SMTP", "SSH", "IRC", "TCP", "UDP",
+    "DHCP", "ARP", "ICMP", "IGMP", "IPv", "LLC",
+}
+WINDOW_DEPENDENT = set(data_prep.EXCLUDED_FEATURES) | {"Std", "Variance"}  # sample-size dependent
+BOUNDED = {"Time_To_Live"}  # IP TTL is at most 255; x2 can exceed it
+
+
+def scale_unsafe_reason(feature):
+    """Why a feature cannot be multiplied in Scenario C, or None if it is scale-safe."""
+    if feature in PROTOCOL_CODES:
+        return "protocol code"
+    if feature in SHARE_FEATURES:
+        return "flag or 0-1 share"
+    if feature in WINDOW_DEPENDENT:
+        return "window-dependent"
+    if feature in BOUNDED:
+        return "hard upper bound"
+    return None
+
+
+def gain_shares(model):
+    """Share of total XGBoost gain per feature, highest first (features with no splits get 0)."""
+    gain = model.model.get_booster().get_score(importance_type="gain")
+    total = sum(gain.values())
+    shares = {f: gain.get(f, 0.0) / total for f in model.feature_names}
+    return dict(sorted(shares.items(), key=lambda kv: kv[1], reverse=True))
+
+
+def select_scale_safe(shares, n=N_SCALED):
+    """Top-n features by gain share that are continuous and scale-safe."""
+    chosen = [f for f in shares if scale_unsafe_reason(f) is None][:n]
+    if len(chosen) < n:
+        raise ValueError(f"Only {len(chosen)} scale-safe features available, need {n}")
+    return chosen
+
+
+def scenario_c_factors(n_before=N_BEFORE, n_after=N_AFTER, start=SCALE_START, end=SCALE_END):
+    """Per-window multiplicative factor: 1.0 for n_before windows, then linear start -> end."""
+    return np.concatenate([np.ones(n_before), np.linspace(start, end, n_after)])
+
+
+def build_scenario_c(benign_df, features, seed, window=WINDOW):
+    """Sample benign rows (without replacement) into windows and scale `features` per window.
+
+    Multiplicative only (CLAUDE.md). Scaled features that are in QUANTISED_FEATURES are
+    re-rounded to the 0.1 grid (CLAUDE.md locked decision). Returns (frame, per-row factor).
+    """
+    factors = scenario_c_factors()
+    n_rows = len(factors) * window
+    if n_rows > len(benign_df):
+        raise ValueError("Not enough benign rows to sample Scenario C without replacement")
+    rng = np.random.default_rng(seed)
+    idx = rng.choice(len(benign_df), n_rows, replace=False)
+    frame = benign_df.iloc[idx].reset_index(drop=True).copy()
+    row_factor = np.repeat(factors, window)
+    for f in features:
+        frame[f] = frame[f] * row_factor
+    return data_prep.quantise(frame), row_factor
+
+
+def out_of_range_counts(frame, row_factor, features, reference_df):
+    """Per feature: scaled rows whose value falls outside reference_df's [min, max]."""
+    scaled = frame[row_factor != 1.0]
+    return {f: int(((scaled[f] < reference_df[f].min()) | (scaled[f] > reference_df[f].max())).sum())
+            for f in features}
+
+
+def largest_jump_sigma(stream, ref, start=N_BEFORE):
+    """Largest single-window rise, in reference sigmas, from window start-1 onward."""
+    z = (np.asarray(stream) - ref.mu0) / ref.sigma
+    d = np.diff(z[start - 1:])
+    i = int(np.argmax(d))
+    return float(d[i]), start + i
 
 
 def load_scores():
@@ -210,7 +300,7 @@ def fmt(mean, std, digits=2):
     return f"{mean:.{digits}f} ± {std:.{digits}f}" if std is not None else f"{mean:.{digits}f}"
 
 
-def plot_scenario_b(stream, ref, h, L, path, seed):
+def plot_stream(stream, ref, h, L, path, title):
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -226,8 +316,7 @@ def plot_scenario_b(stream, ref, h, L, path, seed):
                label=f"EWMA alarms (L={L:.2f})")
     ax.set_xlabel("window (50 rows each)")
     ax.set_ylabel("logit of windowed P(attack)")
-    ax.set_title(f"Scenario B (gradual, Mirai share 0% to 30%), seed {seed}, calibrated detectors\n"
-                 "CICIoT2023 subset (HF mirror), proxy model")
+    ax.set_title(f"{title}\nCICIoT2023 subset (HF mirror), proxy model")
     ax.legend(loc="upper left", fontsize=8)
     fig.tight_layout()
     fig.savefig(path, dpi=130)
@@ -267,15 +356,55 @@ def main():
 
     plot_seed = EVAL_SEEDS[0]
     stream_b = build_stream(test_benign, test_mirai, mirai_counts("B"), plot_seed)
-    plot_scenario_b(stream_b, ref, h_cal, L_cal, RESULTS_DIR / "drift_scenario_b.png", plot_seed)
+    plot_stream(stream_b, ref, h_cal, L_cal, RESULTS_DIR / "drift_scenario_b.png",
+                f"Scenario B (gradual, Mirai share 0% to 30%), seed {plot_seed}, calibrated detectors")
+    first_mirai = int(np.argmax(ramp_mirai_counts() > 0))
+    z_first_mirai = (stream_b[N_BEFORE + first_mirai] - ref.mu0) / ref.sigma
+
+    # Scenario C: covariate drift in benign test rows only, calibrated h and L from above.
+    from proxy_model import ProxyFusionModel
+    model = ProxyFusionModel.load()
+    test = data_prep.load_split("test")
+    benign_df = test[test[data_prep.TARGET] == 0].reset_index(drop=True)
+    shares = gain_shares(model)
+    scaled = select_scale_safe(shares)
+    print("Scenario C features:", {f: round(shares[f], 4) for f in scaled})
+    c_streams, oor_total, n_scaled_rows = [], dict.fromkeys(scaled, 0), 0
+    hl_test_max, hl_above_max = float(test["Header_Length"].max()), 0
+    for s in EVAL_SEEDS:
+        frame, row_factor = build_scenario_c(benign_df, scaled, s)
+        assert frame[data_prep.TARGET].eq(0).all()
+        c_streams.append(window_logits(model.predict_proba(frame)[:, 1]))
+        for f, n in out_of_range_counts(frame, row_factor, scaled, test).items():
+            oor_total[f] += n
+        n_scaled_rows += int((row_factor != 1.0).sum())
+        if "Header_Length" in scaled:
+            hl_above_max += int((frame.loc[row_factor != 1.0, "Header_Length"] > hl_test_max).sum())
+    c_results = {kind: run_streams(kind, ref, param, c_streams)
+                 for kind, param in (("cusum", h_cal), ("ewma", L_cal))}
+    for kind, r in c_results.items():
+        print(f"[calibrated] scenario C {kind:5}: delay {fmt(r['delay_mean'], r['delay_std'])}, "
+              f"false alarms before 200 {fmt(r['fa_mean'], r['fa_std'])}, missed {r['missed']}/{r['n']}")
+    jumps = [largest_jump_sigma(s, ref) for s in c_streams]
+    stream_c = c_streams[0]
+    z_c = (stream_c - ref.mu0) / ref.sigma
+    blocks = [(st, float(scenario_c_factors()[st]), float(scenario_c_factors()[st + 9]),
+               float(z_c[st:st + 10].mean())) for st in range(190, 300, 10)]
+    print("Scenario C largest single-window rise (sigma): "
+          f"median {np.median([j for j, _ in jumps]):.2f}, max {max(j for j, _ in jumps):.2f}")
+    plot_stream(stream_c, ref, h_cal, L_cal, RESULTS_DIR / "drift_scenario_c.png",
+                f"Scenario C (benign covariate drift, 5 features x 1.0 to 2.0), seed {plot_seed}, "
+                "calibrated detectors")
 
     lines = [
         "# Drift detection results: CUSUM vs EWMA (Pillar 4)",
         "",
         "Generated by `python p4_robustness/experiments/drift_experiment.py`. Do not edit by hand.",
         "",
-        "**Data:** CICIoT2023 subset (HF mirror), Mirai vs benign, `Number` excluded. See `data/README.md` "
-        "for provenance and limitations. **Model:** XGBoost proxy, which is not P3's fusion model.",
+        f"**Data:** CICIoT2023 subset (HF mirror), Mirai vs benign. {len(data_prep.EXCLUDED_FEATURES)} window-size "
+        f"leakage features are excluded and {len(data_prep.QUANTISED_FEATURES)} features are quantised to 0.1. See "
+        "`data/README.md` for provenance, the window-size leakage section and limitations. "
+        "**Model:** XGBoost proxy, which is not P3's fusion model.",
         "",
         "**Caveat:** benign and Mirai are almost perfectly separable on this subset, so the attack-side shift "
         "in the monitored scalar is very large. Fast detection here reflects that, not the detectors' "
@@ -331,21 +460,71 @@ def main():
                              f"{fmt(r['delay_mean'], r['delay_std'])} | {fmt(r['fa_mean'], r['fa_std'])} | "
                              f"{r['missed']}/{r['n']} |")
         lines.append("")
-    first_mirai = int(np.argmax(ramp_mirai_counts() > 0))
     lines += [
         "Detection delay is the window index of the first alarm at or after window 200, minus 200, so 0 means "
         "an alarm in the first drift window. It is averaged over seeds that detected the drift.",
         "",
         f"**Scenario B note:** after rounding to whole rows, the first {first_mirai} ramp windows contain 0 Mirai "
-        f"rows. Window {N_BEFORE + first_mirai} is the first to contain any (1 of {WINDOW}). A delay of "
-        f"{first_mirai} therefore means an alarm at the first window containing any Mirai traffic. On this "
-        "subset, one Mirai row in a window is enough to push the logit far above the reference.",
+        f"rows. Window {N_BEFORE + first_mirai} is the first to contain any (1 of {WINDOW}). In the plotted run "
+        f"(seed {plot_seed}), that window's scalar is {z_first_mirai:.1f} sigma above mu0. A delay of "
+        f"{first_mirai} therefore means an alarm at the first window containing any Mirai traffic.",
         "",
         f"Plot: `drift_scenario_b.png` (Scenario B, seed {plot_seed}, calibrated detectors).",
         "",
+        "## Scenario C: covariate drift in benign traffic",
+        "",
+        f"Benign test rows only (no Mirai rows). Windows 0–{N_BEFORE - 1} are unmodified. In windows "
+        f"{N_BEFORE}–{N_BEFORE + N_AFTER - 1}, {N_SCALED} features are multiplied by a factor rising linearly "
+        f"from {SCALE_START} to {SCALE_END} (multiplicative only). Scaled features in `QUANTISED_FEATURES` are "
+        "re-rounded to 0.1. The calibrated h and L from above are reused, not recalibrated.",
+        "",
+        "Features scaled: the top 5 by gain that are continuous and scale-safe. Excluded: protocol codes, "
+        "flag or 0–1 share features, window-dependent features (the excluded set plus `Std` and `Variance`), "
+        "and `Time_To_Live` (hard upper bound of 255).",
+        "",
+        "| Feature | Gain share | Out-of-range scaled rows (all seeds) |",
+        "|---|---|---|",
+    ]
+    lines += [f"| {f} | {shares[f]:.4f} | {oor_total[f]:,} / {n_scaled_rows:,} |" for f in scaled]
+    lines += [
+        "",
+        "Out of range means outside the [min, max] of that feature over the full test split (both classes).",
+        "",
+    ]
+    if "Header_Length" in scaled:
+        lines += [
+            f"**Validity caveat (Header_Length):** its test-split maximum is exactly {hl_test_max:g}, possibly the "
+            f"TCP header byte limit. Scaling took {hl_above_max:,} of {n_scaled_rows:,} scaled rows "
+            f"({hl_above_max / n_scaled_rows:.1%}) above {hl_test_max:g}, which may be physically invalid. "
+            "This is unresolved until the features are recomputed from the PCAPs.",
+            "",
+        ]
+    lines += [
+        "| Detector | Parameter | Detection delay (windows) | False alarms before window 200 | Missed |",
+        "|---|---|---|---|---|",
+    ]
+    for kind, pname, param in (("cusum", "h", h_cal), ("ewma", "L", L_cal)):
+        r = c_results[kind]
+        lines.append(f"| {kind.upper()} | {pname} = {param:.3f} | {fmt(r['delay_mean'], r['delay_std'])} | "
+                     f"{fmt(r['fa_mean'], r['fa_std'])} | {r['missed']}/{r['n']} |")
+    jump_vals = [j for j, _ in jumps]
+    lines += [
+        "",
+        f"**Shape of the drift:** the largest single-window rise in the scalar after window {N_BEFORE - 1}, "
+        f"across {N_SEEDS} seeds: median {np.median(jump_vals):.2f} sigma, max {max(jump_vals):.2f} sigma. "
+        f"Seed {plot_seed}, mean scalar in sigma above mu0 per 10-window block:",
+        "",
+        "| Windows | Factor | Mean sigma above mu0 |",
+        "|---|---|---|",
+    ]
+    lines += [f"| {st}–{st + 9} | {f0:.2f}–{f1:.2f} | {z:+.2f} |" for st, f0, f1, z in blocks]
+    lines += [
+        "",
+        f"Plot: `drift_scenario_c.png` (Scenario C, seed {plot_seed}, calibrated detectors).",
+        "",
     ]
     (RESULTS_DIR / "drift_results.md").write_text("\n".join(lines), encoding="utf-8")
-    print(f"Wrote {RESULTS_DIR / 'drift_results.md'} and {RESULTS_DIR / 'drift_scenario_b.png'}")
+    print(f"Wrote drift_results.md, drift_scenario_b.png and drift_scenario_c.png to {RESULTS_DIR}")
 
 
 if __name__ == "__main__":
