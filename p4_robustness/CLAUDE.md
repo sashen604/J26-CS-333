@@ -5,7 +5,11 @@ Adversarial robustness, SHAP/LIME explainability,
 CUSUM drift detection, incident reporting (WeasyPrint).
 
 ## Locked decisions — do not change without asking
-- CUSUM defaults: k=0.5σ, h=5σ (Estaji et al., IEEE TII 2025)
+- CUSUM defaults: h=5σ (Estaji et al., IEEE TII 2025, guideline 4);
+  k=0.5σ = half of a 1σ target shift (Estaji half-the-shift rule;
+  Montgomery). Firing-side reset to 0 is our design choice.
+  Opposite side resets to 0.5H (Estaji Sec. III-C). Not implemented:
+  10%-of-H growth cap, K-hat truncation.
 - CUSUM is univariate: monitor a named scalar, never a
   raw high-dimensional vector
 - Monitored streams: (1) fused windowed anomaly score,
