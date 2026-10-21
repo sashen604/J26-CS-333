@@ -1,4 +1,7 @@
-"""Tests for experiments/make_figures.py: parsers read the committed files, and figures render."""
+"""Tests for experiments/make_figures.py: parsers read the committed files, and figures render.
+
+Tests that need the raw test split (figure 2) are skipped when it has not been downloaded.
+"""
 import sys
 from pathlib import Path
 
@@ -50,6 +53,33 @@ def test_mean_std_rejects_other_text():
         mf.mean_std("n/a")
 
 
+def number_frame():
+    import pandas as pd
+    # benign: 4 x Number 10, 1 x Number 4; Mirai: 3 x Number 100, 1 x Number 10, 1 x Number 57
+    return pd.DataFrame({"Number": [10, 10, 10, 10, 4, 100, 100, 100, 10, 57],
+                         "is_mirai": [0, 0, 0, 0, 0, 1, 1, 1, 1, 1]})
+
+
+def test_number_groups_counts_10_100_and_other_per_class():
+    g = mf.number_groups(number_frame())
+    assert g["benign"] == {"10": 4, "100": 0, "Other": 1, "total": 5}
+    assert g["Mirai"] == {"10": 1, "100": 3, "Other": 1, "total": 5}
+
+
+def test_check_headline_passes_and_raises():
+    g = mf.number_groups(number_frame())
+    mf.check_headline(g, {"benign": (80.0, 4, 5), "Mirai": (60.0, 3, 5)})
+    with pytest.raises(ValueError, match="benign Number = 10"):
+        mf.check_headline(g, {"benign": (99.97, 19994, 19999), "Mirai": (60.0, 3, 5)})
+
+
+@pytest.mark.skipif(not (mf.REPO_ROOT / "data" / "ciciot2023_hf" / "test.parquet").exists(),
+                    reason="needs the raw test split (python p4_robustness/data_prep.py)")
+def test_raw_number_groups_match_data_readme():
+    g = mf.raw_number_groups()  # raises if the headline shares differ from data/README.md
+    assert g["benign"]["total"] == mf.number_shares()["benign"][2]
+
+
 def test_leakage_rule_raises_when_figure_missing(tmp_path):
     p = tmp_path / "README.md"
     p.write_text("nothing here", encoding="utf-8")
@@ -57,6 +87,8 @@ def test_leakage_rule_raises_when_figure_missing(tmp_path):
         mf.leakage_rule(p)
 
 
+@pytest.mark.skipif(not (mf.REPO_ROOT / "data" / "ciciot2023_hf" / "test.parquet").exists(),
+                    reason="figure 2 needs the raw test split (python p4_robustness/data_prep.py)")
 def test_main_writes_six_16_9_white_pngs(tmp_path):
     from PIL import Image
     paths = mf.main(tmp_path)

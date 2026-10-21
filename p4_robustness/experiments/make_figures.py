@@ -1,14 +1,15 @@
-"""Presentation figures for PP1, drawn from the COMMITTED results only.
+"""Presentation figures for PP1, drawn from the COMMITTED results (and, for figure 2, the raw test split).
 
 Run from the repo root:  python p4_robustness/experiments/make_figures.py
 
-Nothing is recomputed: every number is parsed from data/README.md,
-results/drift_results.md or results/xai_results.md. If a figure cannot be found
-there, the script raises instead of guessing. Output: results/figures/*.png,
+No experiment is rerun. Figures 1 and 3-6 parse every number from data/README.md,
+results/drift_results.md or results/xai_results.md. Figure 2 counts Number values in the
+raw test split and raises unless its two headline shares match data/README.md. If a figure
+cannot be found, the script raises instead of guessing. Output: results/figures/*.png,
 16:9, white background, large fonts for slides.
 
 1. leakage.png                 "off the 0.1 grid -> Mirai" accuracy before vs after quantising
-2. leakage_number.png          benign rows with Number = 10 vs Mirai rows with Number = 100
+2. leakage_number.png          Number value distribution by class (10, 100, other), raw test split
 3. drift_calibration.png       false alarms per 1000 windows, default vs calibrated
 4. drift_scenario_c_delay.png  Scenario C detection delay, mean ± std over seeds
 5. shap_top10.png              top 10 features by mean |SHAP|
@@ -188,16 +189,66 @@ def fig_leakage(out_dir):
     return _save(fig, "leakage.png", out_dir)
 
 
+NUMBER_GROUPS = ("10", "100", "Other")
+
+
+def number_groups(df):
+    """{class: {group: rows}} for Number = 10, Number = 100 and every other value, plus class totals."""
+    import data_prep
+    out = {}
+    for c, name in ((0, "benign"), (1, "Mirai")):
+        n = df.loc[df[data_prep.TARGET] == c, "Number"]
+        ten, hundred = int((n == 10).sum()), int((n == 100).sum())
+        out[name] = {"10": ten, "100": hundred, "Other": len(n) - ten - hundred, "total": len(n)}
+    return out
+
+
+def check_headline(groups, documented):
+    """Raise unless benign at 10 and Mirai at 100 match data/README.md (share to 2 dp, and counts)."""
+    for name, group in (("benign", "10"), ("Mirai", "100")):
+        rows, total = groups[name][group], groups[name]["total"]
+        measured = (round(100 * rows / total, 2), rows, total)
+        if measured != documented[name]:
+            raise ValueError(f"{name} Number = {group}: raw test split gives {measured}, "
+                             f"data/README.md says {documented[name]}")
+
+
+def raw_number_groups():
+    """Number groups counted from the raw (unquantised) test split, checked against data/README.md."""
+    import leakage_audit
+    groups = number_groups(leakage_audit.load_raw("test"))
+    check_headline(groups, number_shares())
+    return groups
+
+
 def fig_leakage_number(out_dir):
+    import numpy as np
     plt = _plt()
-    s = number_shares()
-    fig, ax = _new(plt, "Window size gives the class away")
-    labels = ["Benign rows\nwith Number = 10", "Mirai rows\nwith Number = 100"]
-    vals = [s["benign"][0], s["Mirai"][0]]
-    bars = ax.bar(labels, vals, width=0.5, color=[BLUE, ORANGE])
+    g = raw_number_groups()
+    fig, ax = _new(plt, "Benign windows hold 10 packets, Mirai windows 100")
+    x = np.arange(len(NUMBER_GROUPS))
+    w = 0.38
+    headline = {"benign": "10", "Mirai": "100"}
+    for i, (name, color) in enumerate((("benign", BLUE), ("Mirai", ORANGE))):
+        counts = [g[name][k] for k in NUMBER_GROUPS]
+        shares = [100 * c / g[name]["total"] for c in counts]
+        bars = ax.bar(x + (i - 0.5) * w, shares, w * 0.94, color=color,
+                      label=f"{name.capitalize()} rows (n = {g[name]['total']:,})")
+        for b, k, c, s in zip(bars, NUMBER_GROUPS, counts, shares):
+            cx = b.get_x() + b.get_width() / 2
+            if k == headline[name]:
+                # Beside the tall bar, in the slot of the other class's near-zero bar.
+                side = w if name == "benign" else -w
+                ax.text(cx + side, 55, f"{s:.2f}%\n{c:,} of\n{g[name]['total']:,}", ha="center",
+                        va="center", fontsize=20, color=INK, fontweight="bold")
+            else:
+                ax.text(cx, s + 1.5, f"{c:,}", ha="center", va="bottom", fontsize=17, color=INK_2)
+    ax.set_xticks(x, ["Number = 10", "Number = 100", "Any other value"])
     ax.set_ylim(0, 100)
-    ax.set_ylabel("Share of rows, test split (%)")
-    _inside_labels(ax, bars, [f"{v:.2f}%\n({n:,} of {t:,})" for v, n, t in (s["benign"], s["Mirai"])])
+    ax.set_ylabel("Share of the class's rows (%)")
+    ax.set_xlabel("Number (packets per capture window), raw test split; small labels are row counts",
+                  fontsize=17, color=INK_2, labelpad=14)
+    ax.legend(frameon=False, loc="upper right")
     return _save(fig, "leakage_number.png", out_dir)
 
 
