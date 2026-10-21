@@ -43,8 +43,8 @@ TARGET = "is_mirai"
 # Rule: drop every feature whose value depends on the measurement window length,
 # because window length differs by class in this capture (10 packets benign, 100 Mirai).
 # Evidence (test split):
-# - 'Number' (packets per window) is 10 for 99.95% of benign rows and 100 for 99.42% of
-#   Mirai rows. A single split on it alone reached 0.9998 test accuracy.
+# - 'Number' (packets per window) is 10 for 99.97% of benign rows (19,994/19,999) and 100
+#   for 99.52% of Mirai rows (15,075/15,147). A single split on it alone reached 0.9998 test accuracy.
 # - ack_count, rst_count, syn_count and fin_count are <= Number on every test row, i.e. counts
 #   over the window (benign max 10/6/8/3, Mirai max 100/58/38/11).
 # - Tot sum / (Number x AVG) = 1.0000 at the 1st, 50th and 99th percentiles, for both classes.
@@ -61,7 +61,9 @@ EXCLUDED_FEATURES = (
 
 # Features rounded to 1 decimal place (0.1 grid) for BOTH classes: RESOLUTION LEAKAGE.
 # These are means or shares over the window's packets. Benign values are means over 10
-# packets (always on a 0.1 grid), Mirai over 100 (0.01 grid), so unrounded precision leaks
+# packets (0.1 grid), Mirai over 100 (0.01 grid). 99.98% of benign test rows (19,995/19,999)
+# have all 28 on the 0.1 grid; the 4 off-grid rows have Number = 4, 9, 8 and 6, so off-grid
+# values follow window size, which supports the leakage explanation. Unrounded precision leaks
 # window size: before rounding, "any value off the 0.1 grid -> Mirai" scored 0.8134 test
 # accuracy. Rate, IAT, Std and Variance are not on a grid and are left unrounded.
 QUANTISED_FEATURES = (

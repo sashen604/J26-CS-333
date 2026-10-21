@@ -60,7 +60,8 @@ capture, window length differs by class: 10 packets for benign, 100 for Mirai.
 (see `EXCLUDED_FEATURES` in `p4_robustness/data_prep.py`).
 
 **Evidence (test split):**
-- `Number`, the packets per window, is 10 for 99.95% of benign rows and 100 for 99.42% of Mirai rows.
+- `Number`, the packets per window, is 10 for 99.97% of benign rows (19,994 of 19,999) and 100 for 99.52% of Mirai
+  rows (15,075 of 15,147).
   A one-split rule on it alone reached 0.9998 test accuracy.
 - `ack_count`, `rst_count`, `syn_count` and `fin_count` are ≤ `Number` on every test row. They are
   counts over the window (benign max 10 / 6 / 8 / 3, Mirai max 100 / 58 / 38 / 11).
@@ -68,9 +69,11 @@ capture, window length differs by class: 10 packets for benign, 100 for Mirai.
 - `Tot size` is identical to `AVG` on every row. It is a duplicate, dropped for tidiness.
 
 **Resolution leak (fixed by quantising, not dropping):** the remaining averages and shares are
-means over the window's packets. Benign values are means over 10 packets, so they always fall on a
+means over the window's packets. Benign values are means over 10 packets, so they fall on a
 0.1 grid. Mirai values are means over 100 packets, so they fall on a 0.01 grid. On the test split,
-before rounding, 100% of benign values of 28 such features were on the 0.1 grid. The rule
+before rounding, 99.98% of benign rows (19,995 of 19,999) had all 28 such features on the 0.1 grid,
+not 100%. The 4 off-grid benign rows have `Number` = 4, 9, 8 and 6, i.e. windows of fewer than
+10 packets, so off-grid values follow window size, which supports the leakage explanation. The rule
 "any value off the 0.1 grid → Mirai" scored **0.8134** test accuracy using precision alone.
 **Fix:** the 28 features in `QUANTISED_FEATURES` (`p4_robustness/data_prep.py`) are rounded
 to 1 decimal place for both classes on load. After rounding, the same rule scores **0.5690**,

@@ -24,13 +24,17 @@ accuracy is not a detection result.
 ## 3. Methodology finding: window-size leakage
 
 An audit of the features found that the capture window length differs by class: 10 packets for
-benign, 100 for Mirai. `Number` is 10 for 99.95% of benign rows and 100 for 99.42% of Mirai rows,
+benign, 100 for Mirai. `Number` is 10 for 99.97% of benign rows (19,994 of 19,999) and 100
+for 99.52% of Mirai rows (15,075 of 15,147),
 and a one-split rule on it alone reached 0.9998 test accuracy. Count features were bounded by
 `Number`, and `Tot sum` equalled `Number × AVG` on every percentile checked.
 
 - **Drop:** 7 window-dependent features (`Number`, `Tot sum`, `ack_count`, `rst_count`,
   `syn_count`, `fin_count`, `Tot size`).
-- **Quantise:** benign means fall on a 0.1 grid and Mirai means on a 0.01 grid. The rule "off the 0.1
+- **Quantise:** benign means fall on a 0.1 grid and Mirai means on a 0.01 grid. Before rounding,
+  99.98% of benign rows (19,995 of 19,999) were on the 0.1 grid. The 4 off-grid benign rows have
+  `Number` = 4, 9, 8 and 6, so off-grid values follow window size, which supports the leakage
+  explanation. The rule "off the 0.1
   grid → Mirai" scored 0.8134. After rounding 28 features to 0.1 for both classes, it scores 0.5690,
   which is the majority-class baseline.
 - **Residual:** `Std` and `Variance` still depend on sample size. The full fix is to recompute the
