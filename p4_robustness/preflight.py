@@ -43,8 +43,10 @@ IMPORT_NAMES = {
     "imageio": "imageio",
     "lazy-loader": "lazy_loader",
     "pillow": "PIL",
+    "protobuf": "google.protobuf",
     "pygments": "pygments",
     "python-dateutil": "dateutil",
+    "rpds-py": "rpds",
     "scikit-image": "skimage",
     "scikit-learn": "sklearn",
 }
