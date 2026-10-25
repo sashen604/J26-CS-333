@@ -13,8 +13,8 @@ Whenever a quick-mode setting differs from the committed full results, a note sa
 shows the committed figures from results/drift_results.md and results/xai_results.md.
 If a part fails, its error is printed and the demo moves on to the next part.
 
-Data: "CICIoT2023 subset (HF mirror)"; see data/README.md. Model: XGBoost proxy, not P3's
-fusion model.
+Data: "CICIoT2023 subset (HF mirror)"; see data/README.md. Model: XGBoost proxy, not P2's
+AI model.
 """
 import argparse
 import os
@@ -253,7 +253,7 @@ def main(argv=None):
     if not sys.stdout.isatty():  # piped or redirected output: keep "±" readable
         sys.stdout.reconfigure(encoding="utf-8")
     settings = QUICK if args.quick else FULL
-    print("Pillar 4 demo: CICIoT2023 subset (HF mirror), Mirai vs benign; XGBoost proxy, not P3's fusion model.")
+    print("Pillar 4 demo: CICIoT2023 subset (HF mirror), Mirai vs benign; XGBoost proxy, not P2's AI model.")
     if args.quick:
         print("Running in QUICK mode: notes mark every place where it differs from the committed full results.")
     compute = 0.0

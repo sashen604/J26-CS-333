@@ -406,7 +406,7 @@ def main():
         f"**Data:** CICIoT2023 subset (HF mirror), Mirai vs benign. {len(data_prep.EXCLUDED_FEATURES)} window-size "
         f"leakage features are excluded and {len(data_prep.QUANTISED_FEATURES)} features are quantised to 0.1. See "
         "`data/README.md` for provenance, the window-size leakage section and limitations. "
-        "**Model:** XGBoost proxy, which is not P3's fusion model.",
+        "**Model:** XGBoost proxy, which is not P2's AI model.",
         "",
         "**Caveat:** benign and Mirai are almost perfectly separable on this subset, so the attack-side shift "
         "in the monitored scalar is very large. Fast detection here reflects that, not the detectors' "

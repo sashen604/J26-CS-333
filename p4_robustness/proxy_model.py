@@ -1,4 +1,4 @@
-"""Proxy for P3's fusion model, so Pillar 4 can work before the real model exists.
+"""Proxy for P2's AI model, so Pillar 4 can work before the real model exists.
 
 PURPOSE: this model exists to exercise the predict_proba interface and to serve
 as the baseline for adversarial evaluation. Its accuracy MUST NOT be reported as
@@ -18,7 +18,7 @@ p4_robustness/CLAUDE.md:
 There is no CSI data yet, so this proxy has a flow branch only. X_csi is
 accepted as an argument so callers can already use the final call shape, but
 passing CSI data raises NotImplementedError rather than silently ignoring it.
-When P1 delivers CSI, swap this class for P3's model behind the same interface.
+When P1 delivers CSI, swap this class for P2's AI model behind the same interface.
 
 Run `python p4_robustness/proxy_model.py` to train, evaluate on the held-out
 splits and save the model to data/models/ (gitignored).
@@ -41,7 +41,7 @@ XGB_PARAMS = dict(n_estimators=200, max_depth=6, learning_rate=0.1, random_state
 
 
 class ProxyFusionModel:
-    """Flow-only stand-in for P3's fusion model, with a fixed feature schema."""
+    """Flow-only stand-in for P2's AI model, with a fixed feature schema."""
 
     def __init__(self, booster_model, feature_names):
         self.model = booster_model

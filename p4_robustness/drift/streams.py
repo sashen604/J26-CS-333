@@ -2,7 +2,7 @@
 
 CLAUDE.md lists two monitored streams:
   (1) fused windowed anomaly score             -> implemented here
-  (2) CSI-branch vs flow-branch disagreement   -> STUB, needs P1 CSI data and P3's model
+  (2) CSI-branch vs flow-branch disagreement   -> STUB, needs P1 CSI data and P2's AI model
 
 The model is treated as a black box: anything with
 predict_proba(X_flow, X_csi) -> (n, 2) array works, including the proxy.
@@ -57,11 +57,11 @@ def fused_windowed_anomaly_score(model, X_flow, X_csi=None, *, window, step=None
 def branch_disagreement_score(model, X_flow, X_csi, *, window, step=None):
     """Stream (2): CSI-branch vs flow-branch disagreement. NOT IMPLEMENTED.
 
-    STUB. It needs real CSI data (P1) and P3's fusion model with a CSI branch.
+    STUB. It needs real CSI data (P1) and P2's AI model with a CSI branch.
     The proxy model has no CSI branch (branch_scores()['csi'] is None), so any
     value computed now would be fabricated. Implement once both exist, and agree
     the disagreement measure first (e.g. |p_csi - p_flow| per row, windowed).
     """
     raise NotImplementedError(
-        "Stream (2) csi_flow_branch_disagreement needs P1 CSI data and P3's model; not available yet"
+        "Stream (2) csi_flow_branch_disagreement needs P1 CSI data and P2's AI model; not available yet"
     )

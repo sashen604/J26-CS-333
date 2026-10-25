@@ -1,4 +1,4 @@
-"""SHAP and LIME wrappers around the Pillar 4 model (proxy now, P3's fusion model later).
+"""SHAP and LIME wrappers around the Pillar 4 model (proxy now, P2's AI model later).
 
 Both explain P(Mirai), the second column of predict_proba(X_flow, X_csi).
 
@@ -6,7 +6,7 @@ Both explain P(Mirai), the second column of predict_proba(X_flow, X_csi).
   model.predict_proba(X_flow) on a DataFrame with the model's fixed feature schema.
 - SHAP uses shap.TreeExplainer, which REQUIRES the underlying tree model
   (model.model, the XGBClassifier); it cannot work through predict_proba. Input rows
-  still pass through the model's schema check first. When P3's model replaces the
+  still pass through the model's schema check first. When P2's AI model replaces the
   proxy, TreeExplainer only applies if it is also a tree ensemble; otherwise a
   model-agnostic SHAP explainer (e.g. KernelExplainer on predict_proba) is needed.
 """

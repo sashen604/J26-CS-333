@@ -12,7 +12,7 @@ Every number is computed live or read from committed results files (results/*.md
 figures in leakage_audit.README_EXPECTED); none is typed in here. The helper functions above
 main() are plain Python, so tests can import this module without running Streamlit.
 
-Data: "CICIoT2023 subset (HF mirror)"; see data/README.md. Model: XGBoost proxy, not P3's AI model.
+Data: "CICIoT2023 subset (HF mirror)"; see data/README.md. Model: XGBoost proxy, not P2's AI model.
 """
 import sys
 import time

@@ -7,7 +7,7 @@ All numbers below come from `drift_results.md`, `xai_results.md` (this folder) a
 
 Pillar 4 evaluates the dual-layer IoT botnet detector for robustness, explainability and drift.
 It covers drift detection (CUSUM, with EWMA as the required baseline), explanations (SHAP and
-LIME), adversarial robustness and incident reporting. P3's fusion model is treated as a black box.
+LIME), adversarial robustness and incident reporting. P2's AI model is treated as a black box.
 Until it is available, an **XGBoost proxy model** stands in for it. The proxy's near-perfect
 accuracy is not a detection result.
 

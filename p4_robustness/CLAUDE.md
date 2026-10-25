@@ -23,7 +23,7 @@ CUSUM drift detection, incident reporting (WeasyPrint).
   examples must also respect this grid, or they are invalid
   (Vitorino validity).
 
-## Interface (P3's model is a black box)
+## Interface (P2's model is a black box)
 predict_proba(X_flow, X_csi) -> probabilities
 plus per-branch scores and a fixed feature schema.
 

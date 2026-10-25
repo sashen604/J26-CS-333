@@ -2,7 +2,7 @@
 
 Pillar 4 tests how far the dual-layer IoT botnet detector can be trusted. It covers drift detection
 (CUSUM, with EWMA as the baseline), explanations (SHAP and LIME), adversarial robustness and incident reporting.
-Until P3's fusion model is ready, an XGBoost **proxy model** stands in for it, so its accuracy is not a detection result.
+Until P2's AI model is ready, an XGBoost **proxy model** stands in for it, so its accuracy is not a detection result.
 
 ## Folder layout
 
