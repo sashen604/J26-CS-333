@@ -522,72 +522,76 @@ def tab_drift(st, alt, model, drift_setup):
                + ". One live run is one seed, so its delay can differ from the mean.")
 
 
-HOW_TO_AUDIT = """**What the button does:** Run audit reloads the raw, unrounded test
-data, recomputes 14 leakage figures, and checks each one against
-data/README.md (the data notes file). PASS = every number matches.
+HOW_TO_AUDIT = """**Purpose:** checks whether the raw data reveals the class through
+how it was recorded, rather than through the traffic itself.
 
-**Packets per window by class:** x-axis = packets grouped into each
-row. Benign rows are almost all 10 packets, Mirai rows almost all
-100. That difference is the leak.
+**Run audit:** reloads the raw, unrounded test split, recomputes 14
+leakage figures, and compares each with the values documented in
+data/README.md. PASS means all figures match.
 
-**Off-grid rule:** a cheating rule ("more than one decimal place ->
-Mirai") was right 81% of the time before rounding, 57% after. The
-dashed line (0.5690) = always guessing benign. The trick is dead.
+**Packets per window by class:** benign rows summarise 10 packets
+(99.97%) and Mirai rows 100 packets (99.52%). Window size alone
+identifies the class.
 
-**Tot sum table:** Tot sum / (Number x AVG) = 1.0000 everywhere, so
-Tot sum secretly carries the window size. Dropped.
+**Off-grid rule:** averages over 10 packets fall on a 0.1 grid,
+averages over 100 packets on a 0.01 grid. A rule using only this
+reached 0.8134 accuracy. After rounding all 28 averaged features to
+one decimal, it falls to 0.5690, equal to always predicting benign.
 
-**Say:** "A shortcut could guess the class 81% of the time without
-looking at the traffic. After my fix it's 57%, no better than
-guessing."
+**Tot sum ratio:** Tot sum / (Number x AVG) is 1.0000 at every
+percentile, so Tot sum encodes window size. It is one of 7 features
+removed.
 """
 
-HOW_TO_EXPLAIN = """**Top cards:** the model's verdict, its confidence P(Mirai), and the
-true class.
+HOW_TO_EXPLAIN = """**Purpose:** shows why the model reached its verdict for one row, and
+whether that explanation is repeatable.
 
-**SHAP bars:** each bar = one feature's push on this decision. Amber
-= towards Mirai, blue = towards benign. Longer bar = stronger push.
-Each label shows this row's value next to the normal (benign median)
-value.
+**Verdict cards:** the model's prediction, its probability P(Mirai),
+and the true class.
 
-**Explain again:** reruns SHAP and LIME on the same row. SHAP reads
-the model's trees directly, so it never changes. LIME uses 5,000
-random samples and is not reseeded, so its reasons change. The two
-cards show the share of the top 5 that stayed the same in every run.
+**SHAP chart:** each bar is one feature's contribution to this
+prediction, in log-odds. Amber pushes towards Mirai, blue towards
+benign; longer bars contribute more. Labels show the row's value
+beside the benign median.
 
-**Typical Mirai reasons:** tiny Header_Length, Protocol Type 47 (GRE,
-used by Mirai floods), packets much closer together (low IAT).
+**Explain again:** recomputes SHAP and LIME on the same row. SHAP
+TreeExplainer reads the model's trees directly and is deterministic.
+LIME fits a local model to 5,000 random samples and is not reseeded,
+so its result varies. The overlap cards show the share of the top-5
+features present in every run.
 
-**Say:** "Same row, asked again and again: SHAP gives the same
-reasons every time, LIME doesn't. That's why the reports use SHAP."
+**Typical Mirai indicators:** very small Header_Length, low packet-size
+variation (Std), Protocol Type 47 (GRE, used by Mirai floods), and
+short inter-arrival times (IAT).
 """
 
-HOW_TO_DRIFT = """**What the button does:** builds 300 windows (50 benign rows each).
-Windows 0-199 are normal. From window 200, five features grow
-slowly up to the slider's factor. The model scores each window,
-and calibrated CUSUM and EWMA watch the result.
+HOW_TO_DRIFT = """**Purpose:** tests whether the monitor detects gradual change in
+benign traffic, which the model was not trained on.
 
-**Reading the chart:** dark line = how attack-like each window
-looks (logit of average P(Mirai)). Dotted line = normal level.
-Dashed line = drift starts. Teal triangles = CUSUM alarms, amber =
-EWMA alarms. Delay = first alarm after window 200, minus 200.
+**Run stream:** builds 300 windows of 50 benign test rows. Windows
+0-199 are unchanged. From window 200, Header_Length, Max, Min, AVG
+and IAT are multiplied by a factor rising from 1.0 to the selected
+maximum. Each window's average P(Mirai) is converted to a logit and
+monitored by CUSUM and EWMA, both calibrated to 1 false alarm per
+1,000 windows.
 
-**Single spikes don't trigger alarms:** CUSUM needs evidence to
-build up, and EWMA smooths one-off blips.
+**Chart:** the dark line is the monitored value; the dotted line is
+the normal level from benign validation data; the dashed line marks
+the start of drift. Triangles mark alarms (teal CUSUM, amber EWMA).
+Detection delay is the first alarm at or after window 200, minus 200.
 
-**Many alarms near the end:** each detector resets after an alarm,
-but the drift is still there, so it keeps firing.
+**Behaviour:** both detectors accumulate or smooth evidence, so
+isolated moderate spikes do not usually raise alarms. After an alarm
+each detector resets; while drift continues, it alarms again.
 
-**One run vs the result:** one seed can differ. The official result
-is under the chart: 20 seeds, 16.65 vs 17.00 windows, a tie.
-
-**Say:** "Normal traffic slowly changes from window 200 and both
-detectors catch it. Across 20 runs they average about 17 windows."
+**Single run vs reported result:** one seed can differ from the mean.
+The reported result, shown under the chart, is over 20 seeds at
+factor 2.0: CUSUM 16.65 and EWMA 17.00 windows, a tie.
 """
 
 
 def how_to_read(st, text):
-    with st.expander("How to read this tab", expanded=False):
+    with st.expander("About this analysis", expanded=False):
         st.markdown(text)
 
 
